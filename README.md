@@ -1,6 +1,6 @@
 # nklhd
 
-A virtual filesystem that turns API routes into a filesystem — accessible via **FUSE**, **9p**, or **SSH/SFTP**, with route handlers written in **Lua** or **Tengo**.
+A virtual filesystem that turns API routes into a filesystem — accessible via **FUSE**, **9p**, or **SSH/SFTP**, with route handlers written in [**Lua**](https://github.com/yuin/gopher-lua) or [**Tengo**](https://github.com/d5/tengo).
 
 ## Quick Start
 
