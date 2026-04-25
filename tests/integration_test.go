@@ -134,6 +134,21 @@ func unmountMountPoint(mountPoint string) error {
 			return nil
 		}
 	}
+	// Try fusermount3 if available (libfuse3)
+	if path, lookErr := exec.LookPath("fusermount3"); lookErr == nil {
+		cmd := exec.Command(path, "-u", "-z", mountPoint)
+		if _, cmdErr := cmd.CombinedOutput(); cmdErr == nil {
+			return nil
+		}
+	}
+	// Fallback to umount -l (lazy unmount) which works on stale mounts
+	// where fusermount chdir fails because the FUSE daemon is dead.
+	if umountPath, lookErr := exec.LookPath("umount"); lookErr == nil {
+		cmd := exec.Command(umountPath, "-l", mountPoint)
+		if _, cmdErr := cmd.CombinedOutput(); cmdErr == nil {
+			return nil
+		}
+	}
 	// Fallback to syscall unmount with lazy flag
 	if err := syscall.Unmount(mountPoint, syscall.MNT_DETACH); err == nil {
 		return nil
@@ -1185,7 +1200,7 @@ end)
 	// Start nklhd with both protocols.
 	cmd := exec.Command(nklhdPath,
 		"--config", luaScriptPath,
-		"--protocol", "both",
+		"--protocol", "fuse,9p",
 		"--mount", mountPoint,
 		"--listen", addr,
 		"--verbose",
@@ -1193,7 +1208,7 @@ end)
 	var stderr bytes.Buffer
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
-	t.Logf("Starting nklhd dual: %s --config %s --protocol both --mount %s --listen %s",
+	t.Logf("Starting nklhd dual: %s --config %s --protocol fuse,9p --mount %s --listen %s",
 		nklhdPath, luaScriptPath, mountPoint, addr)
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("failed to start nklhd: %v", err)
