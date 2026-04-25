@@ -1,6 +1,0 @@
-# Test configuration for all FUSE methods
-# This TOML config points to the Lua route definitions
-
-mountpoint = "/tmp/nklhd_test_all_methods"
-rootscript = "test_config_all_methods.lua"
-verbose = false
