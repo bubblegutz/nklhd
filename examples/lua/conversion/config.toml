@@ -1,0 +1,4 @@
+# Configuration for JSON/YAML conversion example
+mountpoint = "/tmp/nklhd-conversion"
+rootscript = "main.lua"
+verbose = true

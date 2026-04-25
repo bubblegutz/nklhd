@@ -1,0 +1,144 @@
+// jq module example (Tengo version)
+// Uses req.jq functions (not Lua's chainable jq API).
+// For filter with function callback, uses native Tengo for-loops.
+//
+// Routes: see /jq/help
+
+app.log("Loading jq example (Tengo)")
+
+// Sample dataset
+users := [
+    {id: 1, name: "Alice", age: 30, role: "admin", tags: ["lua", "go"]},
+    {id: 2, name: "Bob", age: 25, role: "user", tags: ["python"]},
+    {id: 3, name: "Charlie", age: 35, role: "admin", tags: ["go", "rust"]},
+    {id: 4, name: "Diana", age: 28, role: "moderator", tags: ["lua", "js"]},
+    {id: 5, name: "Eve", age: 40, role: "user", tags: ["go", "python"]}
+]
+
+products := [
+    {id: 101, name: "Laptop", price: 999.99, category: "electronics", stock: 10},
+    {id: 102, name: "Mouse", price: 29.99, category: "electronics", stock: 50},
+    {id: 103, name: "Desk", price: 299.99, category: "furniture", stock: 5},
+    {id: 104, name: "Chair", price: 149.99, category: "furniture", stock: 8},
+    {id: 105, name: "Monitor", price: 399.99, category: "electronics", stock: 12}
+]
+
+// Documentation route
+app.read("/jq/help", func(req) {
+    return "jq Module Example (Tengo version)\n" +
+           "==================================\n" +
+           "Available routes:\n" +
+           "  /jq/help         - This help message\n" +
+           "  /jq/users        - List all users (JSON)\n" +
+           "  /jq/users-filtered - Filter users with age > 30\n" +
+           "  /jq/users-names  - Extract just names using pluck\n" +
+           "  /jq/users-admins - Filter by role\n" +
+           "  /jq/users-tags   - Find users with 'go' tag\n" +
+           "  /jq/products     - List all products (JSON)\n" +
+           "  /jq/products-expensive - Filter products with price > 100\n" +
+           "  /jq/products-electronics - Filter by category\n" +
+           "  /jq/search/{pattern} - Find items matching pattern\n" +
+           "  /jq/stats        - Dataset statistics\n" +
+           "\n" +
+           "Tengo jq functions (flat, not chainable):\n" +
+           "  pluck(items, key) - Extract field values\n" +
+           "  where(items, key, val) - Filter by field match\n" +
+           "  has(items, key) - Items with a field\n" +
+           "  find(items, pattern) - Case-insensitive substring match\n" +
+           "  first(items) / last(items) - Get first/last\n" +
+           "  count(items) - Count items"
+})
+
+app.readdir("/jq", func(req) {
+    return "help\nusers\nusers-filtered\nusers-names\nusers-admins\nusers-tags\nproducts\nproducts-expensive\nproducts-electronics\nsearch\nstats"
+})
+
+// Raw users table
+app.read("/jq/users", func(req) {
+    return string(req.json.encode(users))
+})
+
+// Filter users with age > 30 (native for-loop, no jq filter callback)
+app.read("/jq/users-filtered", func(req) {
+    filtered := []
+    for u in users {
+        if u.age > 30 { filtered = append(filtered, u) }
+    }
+    return string(req.json.encode(filtered))
+})
+
+// Extract just names using pluck
+app.read("/jq/users-names", func(req) {
+    names := req.jq.pluck(users, "name")
+    return string(req.json.encode(names))
+})
+
+// Filter by role using where
+app.read("/jq/users-admins", func(req) {
+    admins := req.jq.where(users, "role", "admin")
+    return string(req.json.encode(admins))
+})
+
+// Find users with 'go' in any field using find (case-insensitive substring match)
+app.read("/jq/users-tags", func(req) {
+    goUsers := req.jq.find(users, "go")
+    return string(req.json.encode(goUsers))
+})
+
+// Raw products table
+app.read("/jq/products", func(req) {
+    return string(req.json.encode(products))
+})
+
+// Filter products with price > 100 (native for-loop)
+app.read("/jq/products-expensive", func(req) {
+    expensive := []
+    for p in products {
+        if p.price > 100 { expensive = append(expensive, p) }
+    }
+    return string(req.json.encode(expensive))
+})
+
+// Filter by category using where
+app.read("/jq/products-electronics", func(req) {
+    electronics := req.jq.where(products, "category", "electronics")
+    return string(req.json.encode(electronics))
+})
+
+// Search across both datasets using find (case-insensitive substring match)
+app.read("/jq/search/{pattern}", func(req) {
+    pattern := req.pattern
+    if pattern == undefined || pattern == "" { return "Missing pattern" }
+
+    // Combine datasets with _type field
+    allItems := []
+    for u in users {
+        u._type = "user"
+        allItems = append(allItems, u)
+    }
+    for p in products {
+        p._type = "product"
+        allItems = append(allItems, p)
+    }
+
+    matches := req.jq.find(allItems, pattern)
+    return string(req.json.encode(matches))
+})
+
+// Statistics using count, first, last
+app.read("/jq/stats", func(req) {
+    userCount := req.jq.count(users)
+    productCount := req.jq.count(products)
+    oldestUser := req.jq.last(users) // last in array
+    cheapestProduct := req.jq.first(products) // first in array
+
+    stats := {
+        user_count: userCount,
+        product_count: productCount,
+        oldest_user: oldestUser,
+        cheapest_product: cheapestProduct
+    }
+    return string(req.json.encode(stats))
+})
+
+app.log("jq example routes registered")

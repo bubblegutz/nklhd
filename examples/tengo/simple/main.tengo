@@ -1,0 +1,106 @@
+// Simple nklhd example (Tengo): Modular code with import()
+//
+// This example demonstrates organizing route definitions across multiple
+// files using Tengo's import() function. Each module serves a specific
+// purpose, parallel to the Lua version's require()-based structure.
+
+app.log("Loading simple nklhd example (Tengo)")
+
+// Load configuration module
+config := import("./config")
+app.log("Loaded config module")
+
+// Load routes module (handler definitions)
+routes := import("./routes")
+app.log("Loaded routes module")
+
+mount_point := config.mount_point
+verbose := config.verbose
+max_handlers := config.max_handlers
+config_source := config.source
+
+// ===== Root directory listing =====
+app.readdir("/", func(req) {
+    return "api/\ndocs/\nstatus.txt\nconfig.txt"
+})
+
+// ===== API endpoints =====
+app.readdir("/api", func(req) {
+    return "users\nproducts\nhealth\nmetrics\ninfo"
+})
+
+// Users
+app.readdir("/api/users", routes.list_users)
+app.read("/api/users/{id}", routes.get_user)
+app.write("/api/users", routes.create_user)
+app.unlink("/api/users/{id}", routes.delete_user)
+
+// Products
+app.readdir("/api/products", routes.list_products)
+app.read("/api/products/{id}", routes.get_product)
+app.write("/api/products", routes.create_product)
+
+// Health check
+app.read("/api/health", routes.health_check)
+
+// Metrics
+app.readdir("/api/metrics", routes.list_metrics)
+app.read("/api/metrics/{name}", routes.get_metric)
+
+// API info
+app.read("/api/info", routes.api_info)
+
+// Modules listing
+app.readdir("/api/modules", routes.list_modules)
+app.read("/api/modules/{name}", routes.get_module)
+
+// ===== File operations =====
+app.create("/tmp/{filename}", routes.create_temp_file)
+app.unlink("/tmp/{filename}", routes.remove_temp_file)
+
+// ===== Documentation =====
+app.readdir("/docs", func(req) {
+    return "api.md\nexamples/"
+})
+
+app.read("/docs/api.md", func(req) {
+    return "# nklhd API Documentation (Tengo)\n\n" +
+           "This simple example demonstrates:\n" +
+           "- Route registration with app.read/write/etc.\n" +
+           "- stdlib module access via req.*\n" +
+           "- Multiple API endpoints\n\n" +
+           "## Available endpoints\n" +
+           "- /api/users/ - User management\n" +
+           "- /api/products/ - Product catalog\n" +
+           "- /status.txt - System status\n" +
+           "- /config.txt - Current configuration"
+})
+
+// ===== System status =====
+app.read("/status.txt", func(req) {
+    return "System Status:\n" +
+           "Mount point: " + mount_point + "\n" +
+           "Routes registered: multiple\n" +
+           "Config loaded from: " + config_source + "\n" +
+           "Generated: 2025-04-23 00:00:00"
+})
+
+// ===== Configuration info =====
+app.read("/config.txt", func(req) {
+    return "Configuration:\n" +
+           "Mount point: " + mount_point + "\n" +
+           "Verbose logging: " + string(verbose) + "\n" +
+           "Max handlers: " + string(max_handlers)
+})
+
+// ===== Echo route =====
+app.write("/api/echo", routes.echo)
+
+// ===== Additional FUSE operations =====
+app.getattr("/api/users/{id}", routes.get_user_stat)
+app.open("/api/logs/{date}.log", routes.open_log_file)
+
+// ===== Lookup for /api directory =====
+app.lookup("/api", routes.lookup_api)
+
+app.log("Advanced example loaded successfully")

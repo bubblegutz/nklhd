@@ -1,0 +1,134 @@
+// HTTP module example (Tengo version)
+// Uses req.http.request() and req.http.client()
+// for making HTTP requests to external services.
+//
+// Routes: see /http/help
+
+app.log("Loading HTTP example (Tengo)")
+
+// Documentation route
+app.read("/http/help", func(req) {
+    return "HTTP Module Example (Tengo version)\n" +
+           "=====================================\n" +
+           "Available routes:\n" +
+           "  /http/help       - This help message\n" +
+           "  /http/request    - Demonstrate http.request\n" +
+           "  /http/client     - Demonstrate http.client\n" +
+           "  /http/headers    - Show request headers via httpbin.org\n" +
+           "  /http/status     - Check HTTP status codes\n" +
+           "  /http/post       - POST with JSON body\n" +
+           "  /http/auth       - Basic auth example\n" +
+           "  /http/timeout    - Timeout configuration\n" +
+           "\n" +
+           "Tengo http API:\n" +
+           "  req.http.request(method, url, opts)\n" +
+           "  req.http.client(baseURL, opts)\n" +
+           "    client.get(path, opts)\n" +
+           "    client.post(path, body, opts)\n" +
+           "    client.withBasic(user, pass)\n" +
+           "    client.withBearer(token)"
+})
+
+app.readdir("/http", func(req) {
+    return "help\nrequest\nclient\nheaders\nstatus\npost\nauth\ntimeout"
+})
+
+// Demonstrate http.request with a simple GET request
+app.read("/http/request", func(req) {
+    result := req.http.request("GET", "https://httpbin.org/get", {
+        headers: {"User-Agent": "nklhd-http-example"}
+    })
+    if is_error(result) {
+        return "Error: " + string(result)
+    }
+    return "Status: " + string(result.status) + "\nBody: " + result.body
+})
+
+// Demonstrate http.client with a reusable client
+app.read("/http/client", func(req) {
+    client := req.http.client("https://httpbin.org")
+    result := client.get("/get")
+    if is_error(result) {
+        return "Error: " + string(result)
+    }
+    return "Status: " + string(result.status) + "\nBody: " + result.body
+})
+
+// Demonstrate http.request with a public test service (httpbin.org)
+app.read("/http/headers", func(req) {
+    result := req.http.request("GET", "https://httpbin.org/headers", {
+        headers: {"User-Agent": "nklhd-http-example"}
+    })
+    if is_error(result) {
+        return "Error: " + string(result)
+    }
+    // Pretty-print using json module
+    decoded := req.json.decode(result.body)
+    if is_error(decoded) {
+        return "JSON decode error: " + string(decoded) + "\nRaw response:\n" + result.body
+    }
+    // Extract headers part
+    headers := decoded.headers
+    out := "Response headers from httpbin.org:\n"
+    for k, v in headers {
+        out = out + "  " + k + ": " + v + "\n"
+    }
+    return out
+})
+
+// Demonstrate http.client with a base URL
+app.read("/http/status", func(req) {
+    client := req.http.client("https://httpbin.org")
+    result := client.get("/status/200")
+    if is_error(result) {
+        return "Error: " + string(result)
+    }
+    return "Status: " + string(result.status) + "\nBody: " + result.body
+})
+
+// Demonstrate POST with JSON body (write-only handler)
+app.write("/http/post", func(req) {
+    // Parse incoming data as JSON
+    data := req.data
+    if data == undefined || data == "" {
+        return "No data provided"
+    }
+    decoded := req.json.decode(data)
+    if is_error(decoded) {
+        return "Invalid JSON: " + string(decoded)
+    }
+    // Send to httpbin.org/post
+    result := req.http.request("POST", "https://httpbin.org/post", {
+        headers: {"Content-Type": "application/json"},
+        body: data
+    })
+    if is_error(result) {
+        return "HTTP error: " + string(result)
+    }
+    return result.body
+})
+
+// Demonstrate client with basic authentication
+app.read("/http/auth", func(req) {
+    client := req.http.client("https://httpbin.org")
+    client.withBasic("user", "passwd")
+    result := client.get("/basic-auth/user/passwd")
+    if is_error(result) {
+        return "Error: " + string(result)
+    }
+    return "Auth test: status " + string(result.status) + "\n" + result.body
+})
+
+// Demonstrate timeout configuration
+app.read("/http/timeout", func(req) {
+    // This request will timeout quickly (10ms)
+    result := req.http.request("GET", "https://httpbin.org/delay/10", {
+        timeout_ms: 10
+    })
+    if is_error(result) {
+        return "Expected timeout error: " + string(result)
+    }
+    return "Unexpected success: " + result.body
+})
+
+app.log("HTTP example routes registered")

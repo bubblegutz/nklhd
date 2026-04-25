@@ -1,0 +1,40 @@
+#!/bin/sh
+# Unmount all FUSE mounts for the current user without sudo, using fusermount -z (lazy)
+# Set DRY=1 to do a dry-run (only print targets).
+DRY=${DRY:-0}
+
+# Collect mount points whose fs type contains "fuse"
+mounts=$(awk '/ fuse/ {print $2}' /proc/self/mounts)
+
+if [ -z "$mounts" ]; then
+  echo "No FUSE mounts found."
+  exit 0
+fi
+
+for m in $mounts; do
+  echo "Target: $m"
+  if [ "$DRY" -ne 0 ]; then
+    continue
+  fi
+
+  # Prefer fusermount -z (lazy unmount for FUSE mounts)
+  if command -v fusermount >/dev/null 2>&1; then
+    if fusermount -z "$m" >/dev/null 2>&1; then
+      echo "fusermount -z succeeded: $m"
+      continue
+    else
+      echo "fusermount -z failed for: $m"
+    fi
+  else
+    echo "fusermount not found"
+  fi
+
+  # Fallback to umount -l if available (may require permissions)
+  if command -v umount >/dev/null 2>&1; then
+    if umount -l "$m" >/dev/null 2>&1; then
+      echo "umount -l succeeded: $m"
+    else
+      echo "umount -l failed for: $m (permission or busy?)"
+    fi
+  fi
+done

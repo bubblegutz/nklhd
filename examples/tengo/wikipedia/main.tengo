@@ -1,0 +1,409 @@
+// Wikipedia example for nklhd (Tengo)
+// Demonstrates search, article browsing, lazy link loading, and bookmarking
+// using Wikipedia API and FUSE operations via req.* API.
+
+app.log("Loading Wikipedia example script")
+
+// Bookmark storage directory (relative to working directory)
+bookmarks_dir := "./bookmarks/"
+
+// In-memory state (mutable maps — in-place key add/delete persists
+// across handler invocations even though globals are shallow-copied).
+search_results := {}  // title -> {snippet, pageid}
+articles := {}        // title -> {content, links}
+article_links := {}   // title -> [link1, link2, ...]
+
+// URL-encode a string for query parameters (simple: spaces only)
+url_encode := func(str) {
+    encoded := ""
+    for i := 0; i < len(str); i++ {
+        c := str[i]
+        if c == 32 {
+            encoded += "%20"
+        } else {
+            encoded += string(c)
+        }
+    }
+    return encoded
+}
+
+// --- Search ---
+
+// Write to /search triggers a Wikipedia API search
+app.write("/search", func(req) {
+    query := req.data
+    if query == "" {
+        return "Error: empty search query"
+    }
+
+    app.log("Searching Wikipedia for: " + query)
+
+    api_url := "https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=" + url_encode(query) + "&srlimit=10&srprop=snippet|titlesnippet&utf8=1&format=json"
+
+    http_result := req.http.request("GET", api_url, {
+        timeout_ms: 10000,
+        headers: {"User-Agent": "nklhd-wikipedia-example/1.0"}
+    })
+
+    if is_error(http_result) {
+        return "Search error: " + string(http_result)
+    }
+
+    data := req.json.decode(http_result.body)
+    if is_error(data) {
+        return "JSON decode error: " + string(data)
+    }
+
+    // Clear existing results (in-place map delete persists)
+    for title in search_results {
+        delete(search_results, title)
+    }
+
+    // Store new results
+    count := 0
+    if data.query != undefined && data.query.search != undefined {
+        for idx, item in data.query.search {
+            search_results[item.title] = {
+                snippet: item.snippet,
+                pageid: item.pageid
+            }
+            count++
+        }
+    }
+
+    return "Search completed. " + string(count) + " results found.\n" +
+           "Run: ls result/ to see results.\n" +
+           "Or: cat result/Article_Title.md to read an article."
+})
+
+// Directory listing for /result
+app.readdir("/result", func(req) {
+    files := ""
+    for title in search_results {
+        filename := req.text.replace_all(title, " ", "_")
+        filename = req.text.replace_all(filename, "/", "_")
+        files += filename + ".md\n"
+    }
+    return files
+})
+
+// Read a search result article (fetches from Wikipedia API on first access)
+app.read("/result/{title}.md", func(req) {
+    title := req.params.title
+    title = req.text.replace_all(title, "_", " ")
+
+    result := search_results[title]
+    if result == undefined {
+        return "Error: article not found in search results"
+    }
+
+    // Check if article already cached
+    if articles[title] == undefined {
+        api_url := "https://en.wikipedia.org/w/api.php?action=query&prop=extracts|links&titles=" + url_encode(title) + "&explaintext=1&pllimit=20&utf8=1&format=json"
+
+        http_result := req.http.request("GET", api_url, {
+            timeout_ms: 10000,
+            headers: {"User-Agent": "nklhd-wikipedia-example/1.0"}
+        })
+
+        if is_error(http_result) {
+            return "Error fetching article: " + string(http_result)
+        }
+
+        data := req.json.decode(http_result.body)
+        if is_error(data) {
+            return "JSON decode error: " + string(data)
+        }
+
+        // Extract first valid page from query.pages
+        page := undefined
+        links_list := []
+        if data.query != undefined && data.query.pages != undefined {
+            for pageid, p in data.query.pages {
+                if p.missing == undefined || !p.missing {
+                    page = p
+                }
+            }
+        }
+
+        if page == undefined {
+            return "Error: article not found"
+        }
+
+        // Extract links
+        if page.links != undefined {
+            for lidx, link in page.links {
+                links_list = append(links_list, link.title)
+            }
+        }
+
+        // Cache article content (in-place map set persists)
+        content := page.extract
+        if content == undefined {
+            content = ""
+        }
+        articles[title] = {content: content, links: links_list}
+        article_links[title] = links_list
+    }
+
+    // Build markdown output
+    article := articles[title]
+    md := "# " + title + "\n\n"
+    md += article.content + "\n\n"
+    md += "## Links\n\n"
+
+    for i, link in article.links {
+        idx := i + 1
+        md += req.fmt.sprintf("%d. [%s](article/%s/links/%d)\n", idx, link, title, idx)
+    }
+
+    return md
+})
+
+// --- Article Link Lazy Loading ---
+
+// Directory listing for article links
+app.readdir("/article/{title}/links", func(req) {
+    title := req.params.title
+    title = req.text.replace_all(title, "_", " ")
+
+    links := article_links[title]
+    if links == undefined {
+        return ""
+    }
+
+    files := ""
+    for i in links {
+        idx := i + 1
+        files += string(idx) + "\n"
+    }
+    return files
+})
+
+// Read a specific link (lazy fetch the linked article)
+app.read("/article/{title}/links/{link_id}", func(req) {
+    title := req.params.title
+    title = req.text.replace_all(title, "_", " ")
+
+    link_id := req.params.link_id
+    link_idx := 0
+    // Convert link_id string to int
+    for c := 0; c < len(link_id); c++ {
+        link_idx = link_idx * 10 + int(link_id[c] - 48)
+    }
+    // Convert to 0-based
+    link_idx--
+
+    links := article_links[title]
+    if links == undefined || link_idx < 0 || link_idx >= len(links) {
+        return "Error: invalid link ID"
+    }
+
+    link_title := links[link_idx]
+
+    // Fetch the linked article (cache)
+    if articles[link_title] == undefined {
+        api_url := "https://en.wikipedia.org/w/api.php?action=query&prop=extracts|links&titles=" + url_encode(link_title) + "&explaintext=1&pllimit=20&utf8=1&format=json"
+
+        http_result := req.http.request("GET", api_url, {
+            timeout_ms: 10000,
+            headers: {"User-Agent": "nklhd-wikipedia-example/1.0"}
+        })
+
+        if is_error(http_result) {
+            return "Error fetching linked article: " + string(http_result)
+        }
+
+        data := req.json.decode(http_result.body)
+        if is_error(data) {
+            return "JSON decode error: " + string(data)
+        }
+
+        page := undefined
+        links_list := []
+        if data.query != undefined && data.query.pages != undefined {
+            for pageid, p in data.query.pages {
+                if p.missing == undefined || !p.missing {
+                    page = p
+                }
+            }
+        }
+
+        if page == undefined {
+            return "Error: linked article not found"
+        }
+
+        if page.links != undefined {
+            for lidx, link in page.links {
+                links_list = append(links_list, link.title)
+            }
+        }
+
+        content := page.extract
+        if content == undefined {
+            content = ""
+        }
+        articles[link_title] = {content: content, links: links_list}
+        article_links[link_title] = links_list
+    }
+
+    // Return a summary with link to read full article
+    article := articles[link_title]
+    summary := article.content
+    if len(summary) > 500 {
+        summary = req.text.substring(summary, 0, 500) + "..."
+    }
+    safe_title := req.text.replace_all(link_title, " ", "_")
+    safe_title = req.text.replace_all(safe_title, "/", "_")
+
+    return req.fmt.sprintf("# %s\n\n%s\n\n[Read full article](result/%s.md)", link_title, summary, safe_title)
+})
+
+// --- Bookmark System (persistent to disk via fs module) ---
+
+app.write("/bookmarks/{path}", func(req) {
+    virtual_path := req.params.path
+    fs_path := bookmarks_dir + virtual_path
+
+    // Ensure parent directory exists
+    parent_dir := req.fs.dir(fs_path)
+    if !req.fs.exists(parent_dir) {
+        req.fs.mkdir(parent_dir)
+    }
+
+    write_ok := req.fs.write(fs_path, req.data)
+    if is_error(write_ok) {
+        return "Error writing bookmark: " + string(write_ok)
+    }
+
+    return "Bookmark saved: " + virtual_path
+})
+
+app.read("/bookmarks/{path}", func(req) {
+    virtual_path := req.params.path
+    fs_path := bookmarks_dir + virtual_path
+
+    if !req.fs.exists(fs_path) {
+        return "Error: bookmark not found"
+    }
+
+    content := req.fs.cat(fs_path)
+    if is_error(content) {
+        return "Error reading bookmark: " + string(content)
+    }
+
+    return content
+})
+
+app.create("/bookmarks/{path}", func(req) {
+    virtual_path := req.params.path
+    fs_path := bookmarks_dir + virtual_path
+
+    if req.fs.exists(fs_path) {
+        return "Error: already exists"
+    }
+
+    mkdir_ok := req.fs.mkdir(fs_path)
+    if is_error(mkdir_ok) {
+        return "Error creating directory: " + string(mkdir_ok)
+    }
+
+    return "Directory created: " + virtual_path
+})
+
+app.unlink("/bookmarks/{path}", func(req) {
+    virtual_path := req.params.path
+    fs_path := bookmarks_dir + virtual_path
+
+    if !req.fs.exists(fs_path) {
+        return "Error: not found"
+    }
+
+    // Determine if directory (need recursive) or file
+    is_dir := req.fs.isdir(fs_path)
+    recursive := false
+    if is_dir {
+        recursive = true
+    }
+
+    rm_ok := req.fs.rm(fs_path, recursive)
+    if is_error(rm_ok) {
+        return "Error removing: " + string(rm_ok)
+    }
+
+    return "Removed: " + virtual_path
+})
+
+// List bookmarks (readdir for bookmarks directory)
+app.readdir("/bookmarks", func(req) {
+    fs_path := bookmarks_dir
+
+    if !req.fs.exists(fs_path) {
+        return ""
+    }
+
+    entries := req.fs.ls(fs_path, false)
+    if is_error(entries) {
+        return ""
+    }
+
+    result := ""
+    for idx, entry in entries {
+        full_path := fs_path + entry
+        if req.fs.isdir(full_path) {
+            result += entry + "/\n"
+        } else {
+            result += entry + "\n"
+        }
+    }
+    return result
+})
+
+// --- Root directory ---
+
+app.readdir("/", func(req) {
+    return "search\nresult/\narticle/\nbookmarks/\nREADME.md"
+})
+
+app.read("/README.md", func(req) {
+    return "# Wikipedia Example\n\n" +
+           "This example demonstrates a Wikipedia client using nklhd's FUSE filesystem.\n\n" +
+           "## Usage\n\n" +
+           "1. Search for articles:\n" +
+           "   ```bash\n" +
+           "   echo \"american folk music\" > search\n" +
+           "   ```\n\n" +
+           "2. List search results:\n" +
+           "   ```bash\n" +
+           "   ls result/\n" +
+           "   ```\n\n" +
+           "3. Read an article:\n" +
+           "   ```bash\n" +
+           "   cat result/woody_guthrie.md\n" +
+           "   ```\n\n" +
+           "4. Explore article links (lazy-loaded):\n" +
+           "   ```bash\n" +
+           "   ls article/woody_guthrie/links/\n" +
+           "   cat article/woody_guthrie/links/1\n" +
+           "   ```\n\n" +
+           "5. Bookmark articles:\n" +
+           "   ```bash\n" +
+           "   cp result/woody_guthrie.md bookmarks/music/\n" +
+           "   ```\n\n" +
+           "6. Create bookmark categories:\n" +
+           "   ```bash\n" +
+           "   mkdir bookmarks/music\n" +
+           "   ```\n\n" +
+           "## Features\n\n" +
+           "- Real Wikipedia API integration via req.http\n" +
+           "- Lazy loading of article links\n" +
+           "- Hierarchical bookmark system with persistence via req.fs\n" +
+           "- Markdown formatting\n\n" +
+           "## Implementation Notes\n\n" +
+           "- Uses req.http for API requests\n" +
+           "- Uses req.fs for persistent bookmark storage\n" +
+           "- Caches articles and links in memory (mutable maps)\n" +
+           "- Demonstrates read, write, readdir, create, unlink operations\n"
+})
+
+app.log("Wikipedia example loaded successfully")

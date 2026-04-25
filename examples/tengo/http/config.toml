@@ -1,0 +1,6 @@
+# HTTP client example configuration (Tengo)
+# Note: Tengo does not have an http module.
+# This is a stub example documenting the limitation.
+mountpoint = "/tmp/nklhd-tengo-http"
+rootscript = "main.tengo"
+verbose = false

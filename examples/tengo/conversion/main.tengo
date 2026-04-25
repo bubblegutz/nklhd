@@ -1,0 +1,142 @@
+// JSON/YAML conversion example for nklhd (Tengo version).
+//
+// Uses a mutable map cache for storing converted data, mirroring Lua's
+// app._conversion_cache pattern. Tengo globals are shallow-copied on each
+// handler invocation, but map pointers are shared — so mutating map entries
+// in-place persists across calls.
+//
+// Routes:
+//   /tojson   - Write YAML, read JSON (converts YAML to JSON)
+//   /toyaml   - Write JSON, read YAML (converts JSON to YAML)
+//   /convert  - Write either, read opposite format (auto-detection)
+//   /help     - This message
+
+app.log("Loading conversion example")
+
+// Mutable cache map — entries are shared across handler calls because
+// Tengo copies the map *pointer*, not the underlying data.
+conversion_cache := {}
+
+// YAML to JSON: write YAML, read JSON
+app.write("/tojson", func(req) {
+    data := req.data
+    if data == undefined || data == "" {
+        conversion_cache["tojson"] = "{}"
+        return "{}"
+    }
+    // Decode YAML to object, then encode to JSON
+    decoded := req.yaml.decode(data)
+    if is_error(decoded) {
+        return "error: " + string(decoded)
+    }
+    jsonStr := string(req.json.encode(decoded))
+    conversion_cache["tojson"] = jsonStr
+    app.log("Converted YAML to JSON: " + jsonStr)
+    return jsonStr
+})
+
+app.read("/tojson", func(req) {
+    cached := conversion_cache["tojson"]
+    if cached == undefined || cached == "" {
+        return "{}"
+    }
+    return string(cached)
+})
+
+// JSON to YAML: write JSON, read YAML
+app.write("/toyaml", func(req) {
+    data := req.data
+    if data == undefined || data == "" {
+        conversion_cache["toyaml"] = ""
+        return ""
+    }
+    // Use yaml.fromJSON to convert JSON string directly to YAML string
+    yamlStr := req.yaml.fromJSON(data)
+    if is_error(yamlStr) {
+        return "error: " + string(yamlStr)
+    }
+    conversion_cache["toyaml"] = yamlStr
+    return yamlStr
+})
+
+app.read("/toyaml", func(req) {
+    cached := conversion_cache["toyaml"]
+    if cached == undefined {
+        return ""
+    }
+    return string(cached)
+})
+
+// Auto-detection: write either JSON or YAML, read back the opposite format.
+// Heuristic: if first non-whitespace char is '{' or '[', treat as JSON, else YAML.
+app.write("/convert", func(req) {
+    data := req.data
+    if data == undefined || data == "" {
+        conversion_cache["convert"] = ""
+        return ""
+    }
+    // Find first non-whitespace character
+    i := 0
+    for i < len(data) {
+        b := data[i]
+        if b != 32 && b != 9 && b != 10 && b != 13 { break }
+        i++
+    }
+    if i >= len(data) {
+        conversion_cache["convert"] = ""
+        return ""
+    }
+    firstByte := data[i]
+    if firstByte == 123 || firstByte == 91 {
+        // Likely JSON, convert to YAML
+        yamlStr := req.yaml.fromJSON(data)
+        if is_error(yamlStr) {
+            return "error (JSON->YAML): " + string(yamlStr)
+        }
+        conversion_cache["convert"] = yamlStr
+        return yamlStr
+    } else {
+        // Likely YAML, convert to JSON
+        decoded := req.yaml.decode(data)
+        if is_error(decoded) {
+            return "error (YAML->JSON): " + string(decoded)
+        }
+        jsonStr := string(req.json.encode(decoded))
+        conversion_cache["convert"] = jsonStr
+        return jsonStr
+    }
+})
+
+app.read("/convert", func(req) {
+    cached := conversion_cache["convert"]
+    if cached == undefined {
+        return ""
+    }
+    return string(cached)
+})
+
+// Helper route to show usage
+app.read("/help", func(req) {
+    return "JSON/YAML Conversion Example\n" +
+           "\n" +
+           "Routes:\n" +
+           "  /tojson    - Write YAML, read JSON\n" +
+           "  /toyaml    - Write JSON, read YAML\n" +
+           "  /convert   - Write either, read opposite format (auto-detection)\n" +
+           "  /help      - This message\n" +
+           "\n" +
+           "Examples:\n" +
+           "  echo 'name: test' > /tojson    # Write YAML\n" +
+           "  cat /tojson                    # Read JSON\n" +
+           "\n" +
+           "  echo '{\"x\":1}' > /toyaml\n" +
+           "  cat /toyaml\n" +
+           "\n" +
+           "  echo 'key: value' > /convert\n" +
+           "  cat /convert                   # Outputs JSON\n" +
+           "\n" +
+           "  echo '{\"a\":1}' > /convert\n" +
+           "  cat /convert                   # Outputs YAML"
+})
+
+app.log("Conversion example loaded")

@@ -1,0 +1,132 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: '3'
+
+vars:
+  GO_BIN: go
+  NKHLD_BIN: ./nklhd
+  TEST_TIMEOUT: 30s
+
+tasks:
+  default:
+    desc: Print usage information
+    cmds:
+      - echo "Available tasks:"
+      - echo "  task build        - Build nklhd binary"
+      - echo "  task build-gccgo  - Build with gccgo compiler (optimized)"
+      - echo "  task build-gccgo-static - Build with gccgo (static, aggressive optimizations)"
+      - echo "  task test         - Run all unit tests"
+      - echo "  task test-integration - Run integration tests (requires FUSE)"
+      - echo "  task clean        - Clean up test artifacts and leftover mounts"
+      - echo "  task clean-test   - Clean test executables and caches"
+      - echo "  task clean-mounts - Unmount leftover nklhd mounts"
+
+  build:
+    desc: Build nklhd binary
+    cmds:
+      - "{{.GO_BIN}} build -v ./cmd/nklhd"
+
+  build-gccgo:
+    desc: Build with gccgo compiler (optimized)
+    # Override flags with: task build-gccgo -GCCGO_FLAGS="-O2 -march=native"
+    vars:
+      GCCGO_FLAGS: "-O3"
+    cmds:
+      - "{{.GO_BIN}} build -compiler=gccgo -gccgoflags 'all={{.GCCGO_FLAGS}}' -v ./cmd/nklhd"
+
+  build-gccgo-static:
+    desc: Build with gccgo compiler (static linking, aggressive optimizations)
+    # Override flags with: task build-gccgo-static -GCCGO_FLAGS="-O3 -flto -static -fomit-frame-pointer -march=native -fipa-pta -ftree-vectorize -funroll-loops -fno-semantic-interposition"
+    vars:
+      GCCGO_FLAGS: "-O3 -flto -static -fomit-frame-pointer -march=native -fipa-pta -ftree-vectorize -funroll-loops -fno-semantic-interposition"
+    cmds:
+      - "{{.GO_BIN}} build -compiler=gccgo -gccgoflags 'all={{.GCCGO_FLAGS}}' -v ./cmd/nklhd"
+
+  test:
+    desc: Run all unit tests
+    cmds:
+      - task: clean-test-binaries
+      - task: clean-test
+      - task: clean-mounts
+      - "{{.GO_BIN}} test ./... -short -timeout {{.TEST_TIMEOUT}}"
+      - task: test-integration
+
+  test-integration:
+    desc: Run integration tests (requires FUSE)
+    cmds:
+      - task: pre-test
+      - "{{.GO_BIN}} test ./tests -v -timeout 60s"
+      - task: clean-test-binaries
+
+  test-integration-binary:
+    desc: Run binary integration test only
+    cmds:
+      - task: pre-test
+      - "{{.GO_BIN}} test ./tests -run TestIntegrationNklhdBinary -v -timeout 60s"
+      - task: clean-test-binaries
+
+  clean:
+    desc: Clean up all build artifacts and test leftovers
+    cmds:
+      - task: clean-test
+      - task: clean-mounts
+      - rm -f nklhd
+
+  clean-test:
+    desc: Clean test executables, caches, and temporary files
+    cmds:
+      - "{{.GO_BIN}} clean -testcache"
+      - rm -rf /tmp/nklhd-test-* 2>/dev/null || true
+      - find . -name "*_test" -type f -delete 2>/dev/null || true
+      - find . -name "*.test" -type f -delete 2>/dev/null || true
+      - find . -name "*-test" -type f -delete 2>/dev/null || true
+      - find . -name "*_test*" ! -name "*.go" -type f -delete 2>/dev/null || true
+      - find . -name "*.pid" -type f -delete 2>/dev/null || true
+      - find . -name "*.bak" -type f -delete 2>/dev/null || true
+      - find . -name "*.corrupted" -type f -delete 2>/dev/null || true
+
+  clean-test-binaries:
+    desc: Clean leftover test binaries and pid files (does not clear test cache)
+    cmds:
+      - rm -rf /tmp/nklhd-test-* 2>/dev/null || true
+      - find . -name "*_test" -type f -delete 2>/dev/null || true
+      - find . -name "*.test" -type f -delete 2>/dev/null || true
+      - find . -name "*-test" -type f -delete 2>/dev/null || true
+      - find . -name "*_test*" ! -name "*.go" -type f -delete 2>/dev/null || true
+      - find . -name "*.pid" -type f -delete 2>/dev/null || true
+      - find . -name "*.bak" -type f -delete 2>/dev/null || true
+      - find . -name "*.corrupted" -type f -delete 2>/dev/null || true
+
+  clean-mounts:
+    desc: Unmount any leftover nklhd FUSE mounts
+    cmds:
+      - |
+        set -e
+        if command -v fusermount >/dev/null 2>&1; then
+          for mount in $(mount -t fuse.nklhd 2>/dev/null | awk '{print $3}'); do
+            echo "Unmounting $mount"
+            fusermount -u -z "$mount" 2>/dev/null || true
+          done
+        fi
+        # Also check /proc/mounts for nklhd mounts
+        if [ -f /proc/mounts ]; then
+          grep 'fuse.nklhd' /proc/mounts | while read -r line; do
+            mount_point=$(echo "$line" | awk '{print $2}')
+            echo "Found leftover mount: $mount_point"
+            fusermount -u -z "$mount_point" 2>/dev/null || true
+          done
+        fi
+
+  pre-test:
+    desc: Prepare for tests (clean + build)
+    cmds:
+      - task: clean-test
+      - task: clean-mounts
+      - task: build
+
+  ci:
+    desc: Run CI pipeline (clean, build, test)
+    cmds:
+      - task: clean
+      - task: build
+      - task: test

@@ -1,0 +1,102 @@
+// Tengo serialization example
+// Demonstrates stdlib module access via req in handlers
+//
+// Standard library modules (json, os, text, fmt, math, rand, times, etc.)
+// and custom modules (yaml, http, oauth, fs, jq) are available inside
+// handlers through req.<name>.
+//
+// At the script's top level, use import("name") to load modules.
+
+app.log("Loading serialization example")
+
+// Route that returns a JSON object (mirrors Lua's timestamp field)
+app.read("/api/json/hello", func(req) {
+    data := {message: "Hello from nklhd", timestamp: 1777018016, version: "1.0"}
+    return string(req.json.encode(data))
+})
+
+// Route that demonstrates nested data structures
+// Note: Tengo arrays/maps cannot have trailing commas
+app.read("/api/data/complex", func(req) {
+    users := [
+        {name: "Alice", age: 30, tags: ["admin", "user"]},
+        {name: "Bob", age: 25, tags: ["user"]},
+        {name: "Charlie", age: 35, tags: ["admin", "moderator"]}
+    ]
+    complex := {users: users, metadata: {total: 3, generated: "2025-04-23 00:00:00", format: "JSON"}}
+    return string(req.json.encode(complex))
+})
+
+// Route that echoes back data as JSON or YAML based on format parameter
+// Mirrors Lua's original/length/timestamp fields
+app.read("/api/echo/{format}", func(req) {
+    format := req.format
+    if format == undefined { format = "json" }
+    input := req.data
+    if input == undefined { input = "" }
+    data := {original: input, length: len(input), format: format, timestamp: 1777018016}
+    if format == "yaml" {
+        return req.yaml.encode(data)
+    }
+    return string(req.json.encode(data))
+})
+
+// JSON to YAML conversion: write JSON, read YAML
+app.write("/api/convert/json-to-yaml", func(req) {
+    jsonData := req.data
+    if jsonData == undefined || jsonData == "" {
+        return "No JSON data provided"
+    }
+    decoded := req.json.decode(jsonData)
+    if is_error(decoded) {
+        return "Invalid JSON: " + string(decoded)
+    }
+    return req.yaml.encode(decoded)
+})
+
+// YAML to JSON conversion: write YAML, read JSON
+app.write("/api/convert/yaml-to-json", func(req) {
+    yamlData := req.data
+    if yamlData == undefined || yamlData == "" {
+        return "No YAML data provided"
+    }
+    decoded := req.yaml.decode(yamlData)
+    if is_error(decoded) {
+        return "Invalid YAML: " + string(decoded)
+    }
+    return string(req.json.encode(decoded))
+})
+
+// Route that returns a YAML list of environment variables
+app.read("/api/env", func(req) {
+    env_list := []
+    for key, value in app.env {
+        env_list = append(env_list, {key: key, value: value})
+    }
+    // Sort by key using bubble sort (Tengo has no built-in sort)
+    n := len(env_list)
+    for i := 0; i < n-1; i++ {
+        for j := 0; j < n-i-1; j++ {
+            a := env_list[j]
+            b := env_list[j+1]
+            a_key := a.key
+            b_key := b.key
+            if a_key == undefined { a_key = "" }
+            if b_key == undefined { b_key = "" }
+            // Tengo string comparison uses < operator
+            if a_key > b_key {
+                tmp := env_list[j]
+                env_list[j] = env_list[j+1]
+                env_list[j+1] = tmp
+            }
+        }
+    }
+    return req.yaml.encode(env_list)
+})
+
+// Use import at top level for script-scoped access
+json_mod := import("json")
+
+app.log("JSON module loaded: " + json_mod.encode({status: "ok"}))
+
+app.log("Serialization example loaded successfully")

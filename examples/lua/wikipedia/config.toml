@@ -1,0 +1,15 @@
+# Wikipedia example for nklhd
+# Demonstrates search, article browsing, lazy link loading, and bookmarking
+# using Wikipedia API and FUSE operations.
+
+# Mount point for the FUSE filesystem
+mountpoint = "/tmp/nklhd-wikipedia"
+
+# Main Lua script that implements the Wikipedia interface
+rootscript = "main.lua"
+
+# Enable verbose debug logging for troubleshooting
+verbose = true
+
+# Optional: maximum concurrent handlers
+# max_handlers = 8

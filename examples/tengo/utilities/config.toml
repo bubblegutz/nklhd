@@ -1,0 +1,4 @@
+# Tengo utilities configuration
+mountpoint = "/tmp/nklhd-tengo-utilities"
+rootscript = "main.tengo"
+verbose = true

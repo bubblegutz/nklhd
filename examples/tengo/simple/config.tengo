@@ -1,0 +1,19 @@
+// Configuration module for simple nklhd example (Tengo)
+// Provides configuration settings for the example
+
+config := {}
+config.mount_point = "/tmp/nklhd-tengo-simple"
+config.verbose = true
+config.max_handlers = 8
+config.source = "examples/tengo/simple/config.toml"
+
+// Feature flags matching Lua config
+config.features = {
+    user_management: true,
+    product_catalog: true,
+    file_operations: true,
+    metrics: true,
+    logging: true
+}
+
+export config

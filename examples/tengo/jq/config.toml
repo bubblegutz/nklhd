@@ -1,0 +1,6 @@
+# jq module example configuration (Tengo)
+# Note: Tengo does not have a jq module for jQuery-like table querying.
+# This example demonstrates equivalent operations using native Tengo code.
+mountpoint = "/tmp/nklhd-tengo-jq"
+rootscript = "main.tengo"
+verbose = false

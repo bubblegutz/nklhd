@@ -1,0 +1,6 @@
+# OAuth module example configuration (Tengo)
+# Note: Tengo does not have an oauth module.
+# This is a stub example documenting the limitation.
+mountpoint = "/tmp/nklhd-tengo-oauth"
+rootscript = "main.tengo"
+verbose = false

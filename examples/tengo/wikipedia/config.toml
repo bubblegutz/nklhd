@@ -1,0 +1,6 @@
+# Wikipedia example for nklhd (Tengo)
+# Demonstrates search, article browsing, lazy link loading, and bookmarking
+# using Wikipedia API and FUSE operations via req.* API.
+mountpoint = "/tmp/nklhd-tengo-wikipedia"
+rootscript = "main.tengo"
+verbose = true

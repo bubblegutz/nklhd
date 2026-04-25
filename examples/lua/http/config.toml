@@ -1,0 +1,14 @@
+# HTTP client example configuration
+# Demonstrates http module in Lua for making HTTP requests
+
+# Mount point for the FUSE filesystem
+mountpoint = "/tmp/nklhd-http"
+
+# Lua script that defines routes (relative to this config file directory)
+rootscript = "main.lua"
+
+# Enable verbose debug logging
+verbose = false
+
+# Optional: maximum concurrent handlers
+# max_handlers = 4

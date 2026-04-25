@@ -1,0 +1,238 @@
+// Routes module for simple nklhd example (Tengo)
+// Defines route handlers organized by functionality
+
+config := import("./config")
+
+// ===== Mutable state map =====
+// State is wrapped in a map so mutations persist across handler calls.
+// Tengo copies globals (shallow) on each Serve() call, but map pointers
+// are shared — so state.users = append(...) persists.
+state := {
+    users: [
+        {id: "1", name: "Alice", email: "alice@example.com", role: "admin"},
+        {id: "2", name: "Bob", email: "bob@example.com", role: "user"},
+        {id: "3", name: "Charlie", email: "charlie@example.com", role: "user"}
+    ],
+    products: [
+        {id: "100", name: "Widget", price: 9.99, stock: 42},
+        {id: "101", name: "Gadget", price: 19.99, stock: 15},
+        {id: "102", name: "Thingy", price: 4.99, stock: 100}
+    ]
+}
+
+// ===== Handler definitions =====
+
+list_users := func(req) {
+    uarr := state.users
+    result := ""
+    first := true
+    for u in uarr {
+        if !first { result += "\n" }
+        result += u.id
+        first = false
+    }
+    return result
+}
+
+get_user := func(req) {
+    uid := req.id
+    for u in state.users {
+        if u.id == uid {
+            return "ID: " + u.id + "\nName: " + u.name + "\nEmail: " + u.email + "\nRole: " + u.role
+        }
+    }
+    return "User not found"
+}
+
+create_user := func(req) {
+    data := req.data
+    if data == undefined { data = "" }
+
+    next_id := string(len(state.users) + 4)
+    new_user := {
+        id: next_id,
+        name: "User-" + next_id,
+        email: "",
+        role: "user"
+    }
+    // Mutate the shared map — this persists across calls
+    state.users = append(state.users, new_user)
+    return "User created: " + new_user.id + "\n" +
+           "Name: " + new_user.name + "\n" +
+           "Email: " + new_user.email
+}
+
+delete_user := func(req) {
+    uid := req.id
+    found := false
+    new_users := []
+    for u in state.users {
+        if u.id == uid {
+            found = true
+        } else {
+            new_users = append(new_users, u)
+        }
+    }
+    // Mutate the shared map entry
+    state.users = new_users
+    if found {
+        return "User deleted: " + uid
+    }
+    return "User not found"
+}
+
+list_products := func(req) {
+    result := ""
+    first := true
+    for p in state.products {
+        if !first { result += "\n" }
+        result += p.id + ": " + p.name + " - $" + string(p.price) + " (stock: " + string(p.stock) + ")"
+        first = false
+    }
+    return result
+}
+
+get_product := func(req) {
+    pid := req.id
+    for p in state.products {
+        if p.id == pid {
+            return "ID: " + p.id + "\nName: " + p.name + "\nPrice: $" + string(p.price) + "\nStock: " + string(p.stock)
+        }
+    }
+    return "Product not found"
+}
+
+create_product := func(req) {
+    data := req.data
+    if data == undefined { data = "" }
+
+    next_id := string(100 + len(state.products))
+    new_product := {
+        id: next_id,
+        name: "Product-" + next_id,
+        price: 0.0,
+        stock: 0
+    }
+    state.products = append(state.products, new_product)
+    return "Product created: " + new_product.id + "\n" +
+           "Name: " + new_product.name + "\n" +
+           "Price: $" + string(new_product.price) + "\n" +
+           "Stock: " + string(new_product.stock)
+}
+
+health_check := func(req) {
+    return "Status: OK\n" +
+           "Uptime: 0 seconds\n" +
+           "Memory: 0 MB\n" +
+           "Users: " + string(len(state.users)) + "\n" +
+           "Products: " + string(len(state.products))
+}
+
+list_metrics := func(req) {
+    return "health\nusers\nproducts\nuptime\nmemory"
+}
+
+get_metric := func(req) {
+    name := req.name
+    if name == "users" { return "Total users: " + string(len(state.users)) }
+    if name == "products" { return "Total products: " + string(len(state.products)) }
+    if name == "uptime" { return "Uptime: 0 seconds" }
+    if name == "memory" { return "Memory usage: 0 MB" }
+    if name == "health" { return "Status: OK" }
+    return "Unknown metric: " + name
+}
+
+api_info := func(req) {
+    return "Advanced nklhd Example (Tengo)\n" +
+           "Version: 1.0.0\n" +
+           "Mount point: " + config.mount_point
+}
+
+list_modules := func(req) {
+    return "utils\nroutes\nconfig\nmain"
+}
+
+create_temp_file := func(req) {
+    return "Temporary file created: " + req.filename + "\n" +
+           "Path: /tmp/" + req.filename + "\n" +
+           "Time: 2025-04-23 00:00:00"
+}
+
+remove_temp_file := func(req) {
+    return "Temporary file removed: " + req.filename
+}
+
+echo := func(req) {
+    return "Echo (from custom route): " + req.data
+}
+
+lookup_api := func(req) {
+    return "users\nproducts\nhealth\nmetrics\ninfo\nmodules"
+}
+
+get_user_stat := func(req) {
+    uid := req.id
+    for u in state.users {
+        if u.id == uid {
+            return "size=" + string(len(u.name + u.email + u.role) + 20) + "\nmode=420\nmtime=0\nuid=1000\ngid=1000"
+        }
+    }
+    return "size=0\nmode=0\nmtime=0"
+}
+
+open_log_file := func(req) {
+    return "Opened log file for date: " + req.date + "\n" +
+           "Log entries: 100\n" +
+           "File size: 1.0 KB"
+}
+
+get_module := func(req) {
+    name := req.name
+    if name == "utils" {
+        return "Utility module\n" +
+               "Provides helper functions for route handlers\n" +
+               "Includes: memory usage, uptime, formatting, validation"
+    }
+    if name == "routes" {
+        return "Routes module\n" +
+               "Defines all API route handlers\n" +
+               "Includes: user management, product catalog, system routes"
+    }
+    if name == "config" {
+        return "Configuration module\n" +
+               "Provides settings and custom routes\n" +
+               "Current mount point: " + config.mount_point
+    }
+    if name == "main" {
+        return "Main script\n" +
+               "Orchestrates module loading and route registration\n" +
+               "Sets up package.path for require()"
+    }
+    return "Unknown module: " + name
+}
+
+// ===== Export map of all handlers =====
+
+routes := {}
+routes.state = state
+routes.list_users = list_users
+routes.get_user = get_user
+routes.create_user = create_user
+routes.delete_user = delete_user
+routes.list_products = list_products
+routes.get_product = get_product
+routes.create_product = create_product
+routes.health_check = health_check
+routes.list_metrics = list_metrics
+routes.get_metric = get_metric
+routes.api_info = api_info
+routes.list_modules = list_modules
+routes.create_temp_file = create_temp_file
+routes.remove_temp_file = remove_temp_file
+routes.echo = echo
+routes.lookup_api = lookup_api
+routes.get_module = get_module
+routes.get_user_stat = get_user_stat
+routes.open_log_file = open_log_file
+
+export routes

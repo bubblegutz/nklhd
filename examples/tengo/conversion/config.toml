@@ -1,0 +1,4 @@
+# Configuration for JSON serialization example (Tengo)
+mountpoint = "/tmp/nklhd-tengo-conversion"
+rootscript = "main.tengo"
+verbose = true

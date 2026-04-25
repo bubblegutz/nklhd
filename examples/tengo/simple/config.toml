@@ -1,0 +1,14 @@
+# Advanced nklhd configuration example (Tengo)
+# Demonstrates modular Tengo code with import() and multiple files
+
+# Mount point for the FUSE filesystem
+mountpoint = "/tmp/nklhd-tengo-simple"
+
+# Main Tengo script that imports modules
+rootscript = "main.tengo"
+
+# Enable verbose debug logging for troubleshooting
+verbose = true
+
+# Optional: maximum concurrent handlers
+# max_handlers = 8

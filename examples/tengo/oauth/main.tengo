@@ -1,0 +1,161 @@
+// OAuth module example (Tengo version)
+// Uses req.oauth.client() for OAuth 2.0 functionality.
+//
+// Routes: see /oauth/help
+
+app.log("Loading OAuth example (Tengo)")
+
+app.read("/oauth/help", func(req) {
+    return "OAuth Module Example (Tengo version)\n" +
+           "=====================================\n" +
+           "Available routes:\n" +
+           "  /oauth/help      - This help message\n" +
+           "  /oauth/client    - Show OAuth client configuration\n" +
+           "  /oauth/device    - Simulate device flow start\n" +
+           "  /oauth/device-poll - Poll for device authorization\n" +
+           "  /oauth/authcode  - Generate authorization code URL\n" +
+           "  /oauth/exchange  - Exchange authorization code for token\n" +
+           "  /oauth/attach    - Attach token to HTTP client\n" +
+           "\n" +
+           "IMPORTANT: Replace placeholder endpoints with real OAuth provider\n" +
+           "URLs and credentials for actual usage."
+})
+
+app.readdir("/oauth", func(req) {
+    return "help\nclient\ndevice\ndevice-poll\nauthcode\nexchange\nattach"
+})
+
+// Show OAuth client configuration
+app.read("/oauth/client", func(req) {
+    config := {
+        client_id: "YOUR_CLIENT_ID",
+        token_url: "https://provider.example.com/oauth/token",
+        device_url: "https://provider.example.com/oauth/device/code",
+        timeout_ms: 5000
+    }
+    return "Example OAuth client configuration:\n\n" +
+           string(req.json.encode(config)) + "\n\n" +
+           "To create a client:\n" +
+           "  client := req.oauth.client(config)"
+})
+
+// Simulate device flow start
+app.read("/oauth/device", func(req) {
+    config := {
+        client_id: "test_client",
+        token_url: "https://provider.example.com/oauth/token",
+        device_url: "https://provider.example.com/oauth/device/code"
+    }
+    client := req.oauth.client(config)
+    result := client.device_flow_start("read write")
+    if is_error(result) {
+        return "Device flow error (expected with placeholder URLs): " + string(result) + "\n\n" +
+               "API usage:\n" +
+               "  result := client.device_flow_start(\"read write\")\n" +
+               "  if !is_error(result) {\n" +
+               "    -- Tell user to visit result.verification_uri with result.user_code\n" +
+               "  }"
+    }
+    return "Device flow response:\n\n" + string(req.json.encode(result))
+})
+
+// Poll for device authorization (write-only)
+app.write("/oauth/device-poll", func(req) {
+    data := req.data
+    if data == undefined || data == "" { return "No data provided" }
+    decoded := req.json.decode(data)
+    if is_error(decoded) { return "Invalid JSON: " + string(decoded) }
+
+    deviceCode := decoded.device_code
+    if deviceCode == undefined { return "Missing device_code in request body" }
+
+    config := {
+        client_id: "test_client",
+        token_url: "https://provider.example.com/oauth/token",
+        device_url: "https://provider.example.com/oauth/device/code"
+    }
+    client := req.oauth.client(config)
+    result := client.device_poll(deviceCode, 5, 12)
+    if is_error(result) {
+        return "Polling error (expected with placeholder URLs): " + string(result) + "\n\n" +
+               "API usage:\n" +
+               "  result := client.device_poll(deviceCode, 5, 12)\n" +
+               "  if !is_error(result) {\n" +
+               "    -- Access token: result.access_token\n" +
+               "  }"
+    }
+    return string(req.json.encode(result))
+})
+
+// Generate authorization code URL (no HTTP request, works with placeholders)
+app.read("/oauth/authcode", func(req) {
+    config := {
+        client_id: "YOUR_CLIENT_ID",
+        token_url: "https://provider.example.com/oauth/token"
+    }
+    client := req.oauth.client(config)
+    url := client.auth_code_url("https://provider.example.com/oauth/authorize", "read write", "random_state_123")
+    if is_error(url) {
+        return "Error generating auth code URL: " + string(url)
+    }
+    return "Authorization code URL:\n" + url + "\n\n" +
+           "API usage:\n" +
+           "  url := client.auth_code_url(authEndpoint, scope, state)\n" +
+           "  -- Redirect user to this URL"
+})
+
+// Exchange authorization code for token (write-only)
+app.write("/oauth/exchange", func(req) {
+    data := req.data
+    if data == undefined || data == "" { return "No data provided" }
+    decoded := req.json.decode(data)
+    if is_error(decoded) { return "Invalid JSON: " + string(decoded) }
+
+    code := decoded.code
+    if code == undefined { return "Missing code in request body" }
+
+    redirectUri := decoded.redirect_uri
+    if redirectUri == undefined { redirectUri = "https://yourapp.example.com/callback" }
+
+    clientSecret := decoded.client_secret
+    if clientSecret == undefined { clientSecret = "" }
+
+    config := {
+        client_id: "YOUR_CLIENT_ID",
+        token_url: "https://provider.example.com/oauth/token"
+    }
+    client := req.oauth.client(config)
+    result := client.exchange_code(code, redirectUri, clientSecret)
+    if is_error(result) {
+        return "Exchange error (expected with placeholder URLs): " + string(result) + "\n\n" +
+               "API usage:\n" +
+               "  result := client.exchange_code(code, redirectUri, clientSecret)\n" +
+               "  if !is_error(result) {\n" +
+               "    -- Access token: result.access_token\n" +
+               "  }"
+    }
+    return string(req.json.encode(result))
+})
+
+// Demonstrate attaching token to HTTP client
+app.read("/oauth/attach", func(req) {
+    httpClient := req.http.client("https://api.example.com")
+    oauthClient := req.oauth.client({
+        client_id: "YOUR_CLIENT_ID",
+        token_url: "https://provider.example.com/oauth/token"
+    })
+
+    // Attach bearer token to the HTTP client
+    token := "ACCESS_TOKEN_123"
+    httpClient.withBearer(token)
+
+    result := {
+        http_client_created: true,
+        oauth_client_created: true,
+        attachment_method: "withBearer",
+        status: "Token configured. Use client.get(path) for authenticated requests."
+    }
+    return string(req.json.encode(result))
+})
+
+app.log("OAuth example routes registered")

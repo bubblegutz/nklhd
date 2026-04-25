@@ -1,0 +1,6 @@
+# Test configuration for comprehensive FUSE pattern tests
+# This TOML config points to the Lua route definitions
+
+mountpoint = "/tmp/nklhd_test_fuse_comprehensive"
+rootscript = "test_config_fuse_comprehensive.lua"
+verbose = false

@@ -1,0 +1,14 @@
+# Advanced nklhd configuration example
+# Demonstrates modular Lua code with require() and multiple files
+
+# Mount point for the FUSE filesystem
+mountpoint = "/tmp/nklhd-simple"
+
+# Main Lua script that loads modules
+rootscript = "main.lua"
+
+# Enable verbose debug logging for troubleshooting
+verbose = true
+
+# Optional: maximum concurrent handlers
+# max_handlers = 8

@@ -1,0 +1,14 @@
+// Utility module for simple nklhd example (Tengo)
+// Provides helper functions for route handlers
+
+utils := {}
+
+utils.get_uptime = func() {
+    return 0
+}
+
+utils.get_memory_usage = func() {
+    return "1.36"
+}
+
+export utils

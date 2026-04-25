@@ -1,0 +1,14 @@
+# Simple nklhd configuration example
+# This TOML file configures the FUSE mount and points to the Tengo script
+
+# Mount point for the FUSE filesystem
+mountpoint = "/tmp/nklhd-tengo-simple"
+
+# Tengo script that defines routes (relative to this config file directory)
+rootscript = "main.tengo"
+
+# Enable verbose debug logging
+verbose = false
+
+# Optional: maximum concurrent handlers
+# max_handlers = 4

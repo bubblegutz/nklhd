@@ -1,0 +1,46 @@
+// nklhd utilities example
+// Demonstrates app.env, app.log, and app.debug functionality
+
+app.log("Tengo utilities example starting")
+app.log("Current user: " + app.env.USER)
+app.log("Home directory: " + app.env.HOME)
+app.log("PATH length: " + string(len(app.env.PATH)))
+
+// Debug messages only appear when debug logging is enabled
+app.debug("This debug message will only appear if debug logging is enabled")
+app.log("This log message always appears")
+
+// Register a route that uses environment variables
+app.read("/info", func(req) {
+    result := "User: " + app.env.USER + "\n"
+    result += "Home: " + app.env.HOME + "\n"
+    result += "Max items: " + app.env.MAX_ITEMS + "\n"
+    result += "Default greeting: " + app.env.GREETING + "\n"
+    result += "\n"
+    result += "All environment variables:\n"
+    for k, v in app.env {
+        result += k + "=" + v + "\n"
+    }
+    return result
+})
+
+// A counter that logs each access
+counter := 0
+app.read("/counter", func(req) {
+    counter++
+    app.log("Counter accessed: " + string(counter))
+    app.debug("Counter debug: " + string(counter))
+    return "Counter: " + string(counter)
+})
+
+// A route that shows conditional logging based on environment
+app.read("/debug-test", func(req) {
+    if app.env.DEBUG_MODE == "1" {
+        app.debug("Debug mode is enabled")
+        return "Debug mode is ON"
+    } else {
+        return "Debug mode is OFF (set DEBUG_MODE=1 to enable)"
+    }
+})
+
+app.log("Tengo utilities example routes registered")

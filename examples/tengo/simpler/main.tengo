@@ -1,0 +1,94 @@
+// Simple nklhd example: Basic route definitions
+// This file demonstrates the core routing API using the global 'app' object
+
+// Root directory listing
+app.readdir("/", func(req) {
+    return "hello.txt\ncounter.txt\necho\nfiles/\nuploads/"
+})
+
+// Simple text file
+app.read("/hello.txt", func(req) {
+    return "Hello from nklhd FUSE filesystem!\n" +
+           "This file is served by a Tengo handler."
+})
+
+// Mutable counter using shared map state (map pointers persist across handler calls)
+counter_state := {count: 0}
+app.read("/counter.txt", func(req) {
+    counter_state.count = counter_state.count + 1
+    plural := ""
+    if counter_state.count != 1 { plural = "s" }
+    return "Counter: " + string(counter_state.count) + "\n" +
+           "Read " + string(counter_state.count) + " time" + plural
+})
+
+// Echo handler that returns input data
+app.write("/echo", func(req) {
+    data := req.data
+    if data == undefined { data = "" }
+    return "Echo: " + data
+})
+
+// Directory with nested files
+app.readdir("/files", func(req) {
+    return "readme.txt\nnested/"
+})
+
+app.read("/files/readme.txt", func(req) {
+    return "This is a nested file.\n" +
+           "You can create complex directory structures with Tengo handlers."
+})
+
+app.readdir("/files/nested", func(req) {
+    return "deep.txt"
+})
+
+app.read("/files/nested/deep.txt", func(req) {
+    return "Deeply nested file content."
+})
+
+// File statistics (FUSE getattr operation)
+// Content is 73 bytes: "Hello from nklhd FUSE filesystem!\nThis file is served by a Tengo handler."
+app.getattr("/hello.txt", func(req) {
+    return "size=73\nmode=420"
+})
+
+// Lookup operation (for directory traversal)
+app.lookup("/files", func(req) {
+    return "readme.txt\nnested"
+})
+
+// Create operation (FUSE create)
+app.create("/newfile", func(req) {
+    name := req.name
+    if name == undefined { name = "unknown" }
+    return "Created file: " + name
+})
+
+// Unlink operation (FUSE unlink/remove)
+app.unlink("/deletefile", func(req) {
+    name := req.name
+    if name == undefined { name = "unknown" }
+    return "Deleted file: " + name
+})
+
+// Open operation (FUSE open)
+app.open("/hello.txt", func(req) {
+    flags := req.flags
+    if flags == undefined { flags = "0" }
+    return "File opened with flags: " + string(flags)
+})
+
+// Uploads directory listing
+app.readdir("/uploads", func(req) {
+    return ""  // Empty directory initially
+})
+
+// Wildcard create operation (FUSE create with pattern matching)
+app.create("/uploads/*", func(req) {
+    filename := req["*"]
+    if filename == undefined { filename = "unknown" }
+    return "Created upload file: " + filename + "\n" +
+           "Path: /uploads/" + filename + "\n" +
+           "Time: 2025-04-23 00:00:00"
+})
