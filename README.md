@@ -1,15 +1,13 @@
 # nklhd
 
-A Go filesystem that turns configuration-driven API routes into a mounted
-filesystem — accessible via **FUSE** or **9p** protocol, with route handlers
-written in **Lua** or **Tengo**.
+A virtual filesystem that turns API routes into a filesystem — accessible via **FUSE**, **9p**, or **SSH/SFTP**, with route handlers written in **Lua** or **Tengo**.
 
 ## Quick Start
 
 ```bash
 go build ./cmd/nklhd
 
-# Mount a filesystem
+# Mount a FUSE filesystem
 ./nklhd --config examples/lua/simpler/config.toml --mount /tmp/nklhd
 
 # Read/write files = API calls
@@ -18,6 +16,12 @@ echo "hello world" > /tmp/nklhd/echo
 
 # 9p protocol (no FUSE needed)
 ./nklhd --config examples/lua/simpler/config.toml --protocol 9p --listen localhost:5640
+
+# SSH/SFTP protocol (no FUSE needed)
+./nklhd --config examples/lua/simpler/config.toml --protocol ssh
+
+# Run all available protocols
+./nklhd --config examples/lua/simpler/config.toml --protocol all
 
 # Unmount
 ./nklhd --umount /tmp/nklhd
@@ -45,8 +49,13 @@ Single TOML file. `rootscript` points to your Lua or Tengo entry point.
 
 ```toml
 mountpoint = "/tmp/nklhd"
-rootscript = "main.lua"   # or "main.tengo"
+rootscript = "main.lua"       # or "main.tengo"
 verbose = true
+protocol = "fuse"             # fuse, 9p, ssh, both, or all
+ninepaddr = "localhost:5640"  # 9p listen address
+sshaddr = "localhost:5022"    # SSH listen address
+sshauthorizedkeys = "/path/to/authorized_keys"
+sshhostkey = "/path/to/host_key"
 ```
 
 ## Route API
@@ -90,6 +99,7 @@ internal/
   exports/        — Language-independent API interfaces
   fuse/           — FUSE server implementation
   ninep/          — 9p server implementation
+  sshfs/          — SSH/SFTP server implementation
   lua/            — Lua executor + modules
   tengo/          — Tengo executor + modules
   router/         — Pattern-matching router (radix tree)
