@@ -1,3 +1,5 @@
+> **⚠️ WORK IN PROGRESS** — This project is experimental. Bugs are expected. Interfaces, protocols, and configuration will change without notice. Use at your own risk.
+
 # nklhd
 
 A virtual filesystem that turns API routes into a filesystem — accessible via **FUSE**, **9p**, or **SSH/SFTP**, with route handlers written in [**Lua**](https://github.com/yuin/gopher-lua) or [**Tengo**](https://github.com/d5/tengo).
@@ -51,7 +53,7 @@ Single TOML file. `rootscript` points to your Lua or Tengo entry point.
 mountpoint = "/tmp/nklhd"
 rootscript = "main.lua"       # or "main.tengo"
 verbose = true
-protocol = "fuse"             # fuse, 9p, ssh, both, or all
+protocol = "fuse,9p,ssh"      # comma-separated: fuse, 9p, ssh, all
 ninepaddr = "localhost:5640"  # 9p listen address
 sshaddr = "localhost:5022"    # SSH listen address
 sshauthorizedkeys = "/path/to/authorized_keys"

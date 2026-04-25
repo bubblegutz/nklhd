@@ -42,7 +42,7 @@ func main() {
 	flag.BoolVar(&umount, "u", false, "unmount (short)")
 	flag.BoolVar(&verbose, "verbose", false, "enable verbose debug logging")
 	flag.BoolVar(&verbose, "v", false, "verbose (short)")
-	flag.StringVar(&protocol, "protocol", "fuse", "filesystem protocol: fuse, 9p, ssh, both, or all")
+	flag.StringVar(&protocol, "protocol", "fuse", "comma-separated protocols: fuse, 9p, ssh, all")
 	flag.StringVar(&listenAddr, "listen", "localhost:5640", "9p listen address")
 	flag.StringVar(&sshAddr, "ssh-addr", "localhost:5022", "SSH listen address")
 	flag.StringVar(&sshAuthorizedKeys, "ssh-authorized-keys", "", "path to authorized_keys file")
@@ -95,6 +95,19 @@ func main() {
 		cfg.Protocol = "fuse"
 	}
 
+	// Parse comma-separated protocols into a set
+	prots := parseProtocols(cfg.Protocol)
+
+	// Validate protocol tokens
+	for p := range prots {
+		if p != "fuse" && p != "9p" && p != "ssh" {
+			log.Fatalf("unsupported protocol: %s (use 'fuse', '9p', 'ssh', or 'all')", p)
+		}
+	}
+	if len(prots) == 0 {
+		log.Fatal("no valid protocols specified (use 'fuse', '9p', 'ssh', or 'all')")
+	}
+
 	// Set debug logging
 	if cfg.Verbose {
 		log.Println("Verbose mode enabled")
@@ -121,16 +134,13 @@ func main() {
 	if cfg.RootScript == "" {
 		log.Fatal("root script not specified")
 	}
-	if cfg.Protocol != "fuse" && cfg.Protocol != "9p" && cfg.Protocol != "ssh" && cfg.Protocol != "both" && cfg.Protocol != "all" {
-		log.Fatalf("unsupported protocol: %s (use 'fuse', '9p', 'ssh', 'both', or 'all')", cfg.Protocol)
-	}
-	if (cfg.Protocol == "fuse" || cfg.Protocol == "both" || cfg.Protocol == "all") && cfg.MountPoint == "" {
+	if prots["fuse"] && cfg.MountPoint == "" {
 		log.Fatal("mount point not specified")
 	}
-	if (cfg.Protocol == "9p" || cfg.Protocol == "both" || cfg.Protocol == "all") && cfg.NinepAddr == "" {
+	if prots["9p"] && cfg.NinepAddr == "" {
 		cfg.NinepAddr = "localhost:5640"
 	}
-	if (cfg.Protocol == "ssh" || cfg.Protocol == "all") && cfg.SSHAddr == "" {
+	if prots["ssh"] && cfg.SSHAddr == "" {
 		cfg.SSHAddr = "localhost:5022"
 	}
 
@@ -156,7 +166,7 @@ func main() {
 	var ninepServer *ninep.Server
 	var sshfsServer *sshfs.Server
 
-	if cfg.Protocol == "fuse" || cfg.Protocol == "both" || cfg.Protocol == "all" {
+	if prots["fuse"] {
 		log.Printf("Mount point: %s", cfg.MountPoint)
 
 		// Ensure mount point directory exists
@@ -175,37 +185,31 @@ func main() {
 		}
 	}
 
-	if cfg.Protocol == "9p" || cfg.Protocol == "both" || cfg.Protocol == "all" {
+	if prots["9p"] {
 		log.Printf("9p listen address: %s", cfg.NinepAddr)
 		ninepServer = ninep.NewServer(backend.GetRouter(), cfg.Verbose)
 	}
 
-	if cfg.Protocol == "ssh" || cfg.Protocol == "all" {
+	if prots["ssh"] {
 		log.Printf("SSH listen address: %s", cfg.SSHAddr)
 		sshfsServer = sshfs.NewServer(backend.GetRouter(), cfg.SSHAddr, cfg.SSHAuthorizedKeys, cfg.SSHHostKey, cfg.Verbose)
 	}
 
 	// Print status
-	switch cfg.Protocol {
-	case "all":
-		fmt.Printf("nklhd FUSE + 9p + SSH filesystem running\n")
+	var statusParts []string
+	if prots["fuse"] {
+		statusParts = append(statusParts, "FUSE")
 		fmt.Printf("Mount point: %s\n", cfg.MountPoint)
+	}
+	if prots["9p"] {
+		statusParts = append(statusParts, "9p")
 		fmt.Printf("9p address: %s\n", cfg.NinepAddr)
-		fmt.Printf("SSH address: %s\n", cfg.SSHAddr)
-	case "both":
-		fmt.Printf("nklhd FUSE + 9p filesystem running\n")
-		fmt.Printf("Mount point: %s\n", cfg.MountPoint)
-		fmt.Printf("9p address: %s\n", cfg.NinepAddr)
-	case "fuse":
-		fmt.Printf("nklhd FUSE filesystem running\n")
-		fmt.Printf("Mount point: %s\n", cfg.MountPoint)
-	case "9p":
-		fmt.Printf("nklhd 9p filesystem running\n")
-		fmt.Printf("9p address: %s\n", cfg.NinepAddr)
-	case "ssh":
-		fmt.Printf("nklhd SSH filesystem running\n")
+	}
+	if prots["ssh"] {
+		statusParts = append(statusParts, "SSH")
 		fmt.Printf("SSH address: %s\n", cfg.SSHAddr)
 	}
+	fmt.Printf("nklhd %s filesystem running\n", strings.Join(statusParts, " + "))
 	fmt.Printf("Config: %s\n", cfg.RootScript)
 
 	// Start 9p server in background if present
@@ -249,4 +253,24 @@ func main() {
 			log.Printf("warning: wait failed: %v", err)
 		}
 	}
+}
+
+// parseProtocols parses a comma-separated protocol string into a set of enabled protocols.
+// Supports "fuse", "9p", "ssh", and "all" (fuse+9p+ssh).
+func parseProtocols(s string) map[string]bool {
+	prots := make(map[string]bool)
+	for _, p := range strings.Split(s, ",") {
+		p = strings.TrimSpace(p)
+		switch p {
+		case "all":
+			prots["fuse"] = true
+			prots["9p"] = true
+			prots["ssh"] = true
+		default:
+			if p != "" {
+				prots[p] = true
+			}
+		}
+	}
+	return prots
 }
