@@ -263,3 +263,4 @@ dev.env
 **/*_test
 nklhd-test
 *.pid
+/scripts/
